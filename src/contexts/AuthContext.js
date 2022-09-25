@@ -1,15 +1,24 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   onAuthStateChanged,
-  signOut,  
+  signOut,
   updateEmail,
   updatePassword,
-  deleteUser
+  deleteUser,
 } from "firebase/auth";
+import {
+  doc,
+  query,
+  getDocs,
+  collection,
+  where,
+  addDoc,
+  deleteDoc,
+} from "firebase/firestore";
 
 const AuthContext = createContext();
 
@@ -24,6 +33,15 @@ export function AuthProvider({ children }) {
   async function signup(email, password) {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
+      await addDoc(collection(db, "test-users"), {
+        uid: res.user.uid,
+        name: "",
+        authProvider: "local",
+        email,
+        isAdmin: false,
+        role: "user",
+        avatar: "",
+      });
       return res;
     } catch (err) {
       console.error(err);
@@ -51,8 +69,35 @@ export function AuthProvider({ children }) {
     return updatePassword(currentUser, password);
   }
 
-  function deleteCurrentUser() {
-    return deleteUser(currentUser);
+  async function deleteCurrentUser() {
+    const user = currentUser.uid;
+    // https://cloud.google.com/firestore/docs/query-data/get-data
+    const q = query(collection(db, "test-users"), where("uid", "==", user));
+
+    const querySnapshot = await getDocs(q);
+
+    // ensure only one document has been found
+    if (querySnapshot.size === 1) {
+      querySnapshot.forEach((document) => {
+        deleteDoc(doc(db, "test-users", document.id))
+          .then(() => {
+            console.log("The document " + document.id + " has been deleted.");
+          })
+          .catch((error) => {
+            console.log(error);
+            alert(error.message);
+          });
+        alert(
+          "The account and associated data have sucessfully been deleted. Close this window to be returned to the homepage."
+        );
+        return deleteUser(currentUser);
+      });
+    } else {
+      console.log(
+        "There was an error, more than one document was found in the store for that user."
+      );
+    }
+    return;
   }
 
   useEffect(() => {
